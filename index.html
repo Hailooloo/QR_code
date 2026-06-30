@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>二维码生成器 · QR Studio</title>
+  <style>
+    :root {
+      --bg-1: #0c4a6e;
+      --bg-2: #075985;
+      --accent: #0ea5e9;
+      --accent-2: #38bdf8;
+      --text: #f0f9ff;
+      --text-dim: #bae6fd;
+      --card: rgba(255, 255, 255, 0.06);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --radius: 18px;
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      min-height: 100vh;
+      color: var(--text);
+      background: radial-gradient(1200px 600px at 10% -10%, rgba(14,165,233,0.28), transparent 60%),
+                  radial-gradient(1000px 500px at 110% 10%, rgba(56,189,248,0.25), transparent 55%),
+                  linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      overflow-x: hidden;
+    }
+
+    /* 浮动装饰光斑 */
+    .orb { position: fixed; border-radius: 50%; filter: blur(70px); opacity: 0.5; z-index: 0; animation: float 14s ease-in-out infinite; }
+    .orb.a { width: 320px; height: 320px; background: #0ea5e9; top: -80px; left: -60px; }
+    .orb.b { width: 280px; height: 280px; background: #38bdf8; bottom: -90px; right: -50px; animation-delay: -5s; }
+    @keyframes float { 0%,100% { transform: translateY(0) translateX(0); } 50% { transform: translateY(30px) translateX(20px); } }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 960px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+
+    .header {
+      padding: 28px 36px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid var(--card-border);
+      background: linear-gradient(90deg, rgba(14,165,233,0.22), rgba(56,189,248,0.1));
+    }
+    .logo-badge {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid; place-items: center;
+      box-shadow: 0 8px 20px rgba(14,165,233,0.45);
+    }
+    .logo-badge svg { width: 26px; height: 26px; }
+    .header h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
+    .header p { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+
+    .body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    @media (max-width: 760px) { .body { grid-template-columns: 1fr; } }
+
+    .panel { padding: 32px 36px; }
+    .panel.form { border-right: 1px solid var(--card-border); }
+    @media (max-width: 760px) { .panel.form { border-right: none; border-bottom: 1px solid var(--card-border); } }
+
+    .field { margin-bottom: 24px; }
+    .field label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 600; color: var(--text);
+      margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.6px;
+    }
+    .field label .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background: rgba(0,0,0,0.25);
+      color: var(--text);
+      font-size: 14px;
+      transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+    }
+    input[type="text"]::placeholder { color: #64748b; }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: rgba(0,0,0,0.35);
+      box-shadow: 0 0 0 4px rgba(14,165,233,0.2);
+    }
+
+    /* 上传区域 */
+    .upload {
+      position: relative;
+      border: 2px dashed var(--card-border);
+      border-radius: 14px;
+      padding: 22px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.25s, background 0.25s;
+      background: rgba(0,0,0,0.18);
+    }
+    .upload:hover, .upload.drag { border-color: var(--accent); background: rgba(14,165,233,0.12); }
+    .upload input { display: none; }
+    .upload .icon { font-size: 28px; margin-bottom: 8px; opacity: 0.8; }
+    .upload .txt { font-size: 13px; color: var(--text-dim); }
+    .upload .txt b { color: var(--accent); }
+    .preview-thumb {
+      margin-top: 14px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+    }
+    .preview-thumb.show { display: flex; }
+    .preview-thumb img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; }
+    .preview-thumb .name { flex: 1; font-size: 12px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-thumb .remove { cursor: pointer; color: #f87171; font-size: 18px; line-height: 1; padding: 4px; }
+
+    /* 颜色选择 */
+    .colors { display: flex; gap: 14px; flex-wrap: wrap; }
+    .swatch {
+      width: 42px; height: 42px; border-radius: 12px; cursor: pointer;
+      position: relative; transition: transform 0.2s, box-shadow 0.2s;
+      border: 2px solid transparent;
+    }
+    .swatch:hover { transform: translateY(-3px); }
+    .swatch.active { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,0.25), 0 8px 18px rgba(0,0,0,0.4); }
+    .swatch.active::after {
+      content: "✓"; position: absolute; inset: 0; display: grid; place-items: center;
+      color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: transform 0.15s, box-shadow 0.25s, opacity 0.2s;
+      box-shadow: 0 10px 26px rgba(14,165,233,0.4);
+    }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(14,165,233,0.55); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* 预览面板 */
+    .panel.result { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+    .qr-stage {
+      width: 280px; height: 280px;
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--card-border);
+      display: grid; place-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .qr-stage .placeholder { text-align: center; color: var(--text-dim); padding: 20px; }
+    .qr-stage .placeholder .big { font-size: 40px; margin-bottom: 10px; opacity: 0.5; }
+    .qr-stage .placeholder .sm { font-size: 13px; }
+    #qrCanvas { display: none; border-radius: 12px; animation: pop 0.45s cubic-bezier(0.16,1,0.3,1); background: #fff; }
+    @keyframes pop { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+
+    .download-btn {
+      display: none;
+      align-items: center; gap: 8px;
+      padding: 14px 34px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+      color: #fff;
+      font-size: 15px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px;
+      box-shadow: 0 10px 26px rgba(14,165,233,0.5);
+      transition: background 0.2s, transform 0.15s, box-shadow 0.25s;
+    }
+    .download-btn.show { display: inline-flex; }
+    .download-btn:hover { background: linear-gradient(135deg, #0284c7, #0ea5e9); transform: translateY(-2px); box-shadow: 0 14px 34px rgba(14,165,233,0.65); }
+    .download-btn:active { transform: translateY(0); }
+
+    /* 生成后颜色面板 */
+    .color-panel {
+      display: none;
+      width: 100%;
+      max-width: 320px;
+      padding: 18px;
+      border-radius: 16px;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid var(--card-border);
+      animation: rise 0.45s cubic-bezier(0.16,1,0.3,1);
+    }
+    .color-panel.show { display: block; }
+    .cp-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 14px; letter-spacing: 0.4px; }
+    /* 第一行：5 单色 + 彩虹混色，全部排成一行 */
+    .color-panel .colors { justify-content: center; gap: 10px; flex-wrap: nowrap; }
+    .color-panel .swatch { width: 36px; height: 36px; border-radius: 10px; }
+
+    /* 彩虹混色色块 */
+    .swatch.rainbow {
+      background: conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #6366f1, #a855f7, #ef4444);
+    }
+
+    /* 第二行：提示文字 + 右侧取色器（去掉左侧色块） */
+    .picker-row {
+      margin-top: 16px; padding-top: 14px;
+      border-top: 1px dashed var(--card-border);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .picker-label { font-size: 12px; color: var(--text-dim); cursor: pointer; line-height: 1.5; }
+    #colorPicker {
+      flex: 0 0 auto;
+      width: 46px; height: 36px; padding: 0; border: 1px solid var(--card-border);
+      border-radius: 10px; background: transparent; cursor: pointer;
+    }
+    #colorPicker::-webkit-color-swatch-wrapper { padding: 3px; }
+    #colorPicker::-webkit-color-swatch { border: none; border-radius: 7px; }
+
+    .dl-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+    .toast {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: #1e293b; color: #fff; padding: 12px 22px; border-radius: 10px;
+      font-size: 13px; box-shadow: var(--shadow); border: 1px solid var(--card-border);
+      opacity: 0; pointer-events: none; transition: opacity 0.3s, transform 0.3s; z-index: 99;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.error { border-color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="orb a"></div>
+  <div class="orb b"></div>
+
+  <div class="wrap">
+    <div class="header">
+      <div class="logo-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="14" x2="14" y2="14"/>
+          <line x1="20" y1="14" x2="20" y2="14"/><line x1="14" y1="20" x2="14" y2="20"/><line x1="20" y1="20" x2="20" y2="20"/>
+        </svg>
+      </div>
+      <div>
+        <h1>二维码生成器</h1>
+        <p>输入链接 · 上传图片 · 选择颜色，一键生成居中 Logo 二维码</p>
+      </div>
+    </div>
+
+    <div class="body">
+      <!-- 表单面板 -->
+      <div class="panel form">
+        <div class="field">
+          <label><span class="dot"></span>目标链接 / 文本</label>
+          <input type="text" id="linkInput" placeholder="https://example.com" />
+        </div>
+
+        <div class="field">
+          <label><span class="dot"></span>居中图片 (Logo)</label>
+          <div class="upload" id="uploadBox">
+            <input type="file" id="imgInput" accept="image/*" />
+            <div class="icon">🖼️</div>
+            <div class="txt">点击或拖拽图片到此处，<b>选填</b></div>
+          </div>
+          <div class="preview-thumb" id="thumb">
+            <img id="thumbImg" alt="preview" />
+            <span class="name" id="thumbName"></span>
+            <span class="remove" id="thumbRemove" title="移除">✕</span>
+          </div>
+        </div>
+
+        <button class="btn" id="genBtn">⚡ 生成二维码</button>
+      </div>
+
+      <!-- 结果面板 -->
+      <div class="panel result">
+        <div class="qr-stage">
+          <div class="placeholder" id="placeholder">
+            <div class="big">📱</div>
+            <div class="sm">二维码将在这里显示</div>
+          </div>
+          <canvas id="qrCanvas" width="280" height="280"></canvas>
+        </div>
+
+        <!-- 生成后才显示的颜色调整面板 -->
+        <div class="color-panel" id="colorPanel">
+          <div class="cp-title">🎨 选择二维码颜色</div>
+          <div class="colors" id="colors"></div>
+          <div class="picker-row">
+            <label class="picker-label" for="colorPicker">点击右侧色块，拖动取色器选择自定义颜色</label>
+            <input type="color" id="colorPicker" value="#0ea5e9" />
+          </div>
+        </div>
+
+        <div class="dl-row" id="dlRow">
+          <button class="download-btn" id="downloadBtn">⬇️ 下载二维码 (PNG)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="qrcode.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
